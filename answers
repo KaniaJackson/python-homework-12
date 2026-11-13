@@ -1,0 +1,269 @@
+1. import random
+
+class Die:
+    """Represents an LCR special die with L, R, C, and dot (no-action) sides."""
+    SIDES = ['L', 'R', 'C', '.', '.', '.']
+    
+    def roll(self):
+        return random.choice(self.SIDES)
+
+class Player:
+    """Represents an individual player in the LCR game."""
+    def __init__(self, name, chips=3):
+        self.name = name
+        self.chips = chips
+        self.left = None  
+        self.right = None  
+
+    def __str__(self):
+        return f"{self.name} (Chips: {self.chips})"
+
+class Pot:
+    """Represents the central pot holding accumulated chips."""
+    def __init__(self):
+        self.amount = 0
+
+    def add(self, count=1):
+        self.amount += count
+
+    def claim(self):
+        prize = self.amount
+        self.amount = 0
+        return prize
+
+class LCRGame:
+    """Control engine for the Left Center Right simulation."""
+    def __init__(self, player_names):
+        self.players = [Player(name) for name in player_names]
+        num_players = len(self.players)
+        for i in range(num_players):
+            self.players[i].left = self.players[(i - 1) % num_players]
+            self.players[i].right = self.players[(i + 1) % num_players]
+        self.pot = Pot()
+        self.die = Die()
+
+    def active_players_count(self):
+        return sum(1 for p in self.players if p.chips > 0)
+
+    def get_winner(self):
+        survivors = [p for p in self.players if p.chips > 0]
+        return survivors[0] if len(survivors) == 1 else None
+
+    def play_turn(self, player):
+        if player.chips == 0:
+            return 
+        
+        num_dice = min(player.chips, 3)
+        rolls = [self.die.roll() for _ in range(num_dice)]
+        
+        for r in rolls:
+            if r == 'L':
+                player.chips -= 1
+                player.left.chips += 1
+            elif r == 'R':
+                player.chips -= 1
+                player.right.chips += 1
+            elif r == 'C':
+                player.chips -= 1
+                self.pot.add(1)
+          
+
+    def simulate_round(self):
+        for player in self.players:
+            if self.active_players_count() <= 1:
+                break
+            self.play_turn(player)
+
+    def run_game(self, callback=None):
+        round_num = 1
+        while self.active_players_count() > 1:
+            self.simulate_round()
+            winner = self.get_winner()
+            if winner:
+                winner.chips += self.pot.claim()
+                break
+            round_num += 1
+        return self.get_winner(), round_num
+2.class LCRInterface:
+    def show_game_start(self, players): raise NotImplementedError
+    def show_turn(self, player, rolls, pot_amount): raise NotImplementedError
+    def show_winner(self, winner, pot_amount): raise NotImplementedError
+
+class TextualLCRInterface(LCRInterface):
+    def show_game_start(self, players):
+        print("=== LCR Game Started ===")
+        for p in players:
+            print(f" - {p}")
+
+    def show_turn(self, player, rolls, pot_amount):
+        print(f"{player.name} rolls {rolls} -> Chips: {player.chips} | Center Pot: {pot_amount}")
+
+    def show_winner(self, winner, pot_amount):
+        print(f"\nWinner is {winner.name} with {winner.chips} chips, taking the pot of {pot_amount}!")
+
+
+import tkinter as tk
+from tkinter import messagebox
+
+class GraphicalLCRInterface(LCRInterface):
+    def __init__(self, root):
+        self.root = root
+        self.root.title("LCR Dice Game")
+        self.label = tk.Label(root, text="LCR Initialized", font=("Arial", 14))
+        self.label.pack(pady=10)
+
+    def show_game_start(self, players):
+        self.label.config(text=f"Game started with {len(players)} players.")
+
+    def show_turn(self, player, rolls, pot_amount):
+        self.label.config(text=f"{player.name} rolled {rolls}\nPot: {pot_amount}")
+        self.root.update()
+
+    def show_winner(self, winner, pot_amount):
+        messagebox.showinfo("Game Over", f"Winner: {winner.name} wins {pot_amount} chips!")
+3.import random
+
+class Die:
+    def __init__(self):
+        self.value = None
+        self.is_kept = False
+
+    def roll(self):
+        if not self.is_kept:
+            self.value = random.randint(1, 6)
+        return self.value
+
+class DiceCollection:
+    def __init__(self, count=5):
+        self.dice = [Die() for _ in range(count)]
+        self.has_ship = False
+        self.has_captain = False
+        self.has_crew = False
+
+    def roll_unkept(self):
+        for d in self.dice:
+            if not d.is_kept:
+                d.roll()
+        self.evaluate_progress()
+
+    def evaluate_progress(self):
+     
+        if not self.has_ship:
+            for d in self.dice:
+                if d.value == 6 and not d.is_kept:
+                    d.is_kept = True
+                    self.has_ship = True
+                    break
+        if self.has_ship and not self.has_captain:
+            for d in self.dice:
+                if d.value == 5 and not d.is_kept:
+                    d.is_kept = True
+                    self.has_captain = True
+                    break
+        if self.has_ship and self.has_captain and not self.has_crew:
+            for d in self.dice:
+                if d.value == 4 and not d.is_kept:
+                    d.is_kept = True
+                    self.has_crew = True
+                    break
+
+    def get_cargo_score(self):
+        if not (self.has_ship and self.has_captain and self.has_crew):
+            return 0
+        return sum(d.value for d in self.dice if not d.is_kept)
+
+    def reset(self):
+        for d in self.dice:
+            d.is_kept = False
+            d.value = None
+        self.has_ship = False
+        self.has_captain = False
+        self.has_crew = False
+
+class Player:
+    def __init__(self, name):
+        self.name = name
+        self.score = 0
+
+class ShipCaptainCrewGame:
+    def __init__(self, player_names):
+        self.players = [Player(name) for name in player_names]
+
+    def play_turn(self, player, interface):
+        collection = DiceCollection(5)
+        last_score = 0
+        for roll_num in range(1, 4):
+            collection.roll_unkept()
+            last_score = collection.get_cargo_score()
+            interface.display_roll(player, collection.dice, roll_num, last_score)
+            if collection.has_ship and collection.has_captain and collection.has_crew:
+             
+                if roll_num < 3 and not interface.ask_keep_score():
+                  
+                    for d in collection.dice:
+                        if d.value not in (6, 5, 4):
+                            d.is_kept = False
+                else:
+                    break
+        player.score = last_score
+4.class SCCInterface:
+    def display_roll(self, player, dice, roll_num, score): raise NotImplementedError
+    def ask_keep_score(self): raise NotImplementedError
+
+class TextualSCCInterface(SCCInterface):
+    def display_roll(self, player, dice, roll_num, score):
+        vals = [d.value for d in dice]
+        print(f"[{player.name}] Roll {roll_num}: {vals} -> Current Cargo Score: {score}")
+
+    def ask_keep_score(self):
+        ans = input("Keep current cargo score? (y/n): ").strip().lower()
+        return ans == 'y'
+
+class GraphicalSCCInterface(SCCInterface):
+    def __init__(self, root):
+        self.root = root
+        self.keep_score = True
+
+    def display_roll(self, player, dice, roll_num, score):
+      
+        pass
+
+    def ask_keep_score(self):
+        return self.keep_score
+5.import math
+
+class Ball:
+    def __init__(self, x, y, vx, vy, radius, color="blue", gravity=9.8, restitution=0.8):
+        self.x = x
+        self.y = y
+        self.vx = vx
+        self.vy = vy
+        self.radius = radius
+        self.color = color
+        self.gravity = gravity
+        self.restitution = restitution  # Bounciness factor (0 to 1)
+
+    def update(self, dt, floor_y=0, ceiling_y=600, left_x=0, right_x=800):
+      
+        self.vy -= self.gravity * dt
+        
+      
+        self.x += self.vx * dt
+        self.y += self.vy * dt
+        
+       
+        if self.y - self.radius <= floor_y:
+            self.y = floor_y + self.radius
+            self.vy = -self.vy * self.restitution
+            
+        
+        if self.y + self.radius >= ceiling_y:
+            self.y = ceiling_y - self.radius
+            self.vy = -self.vy * self.restitution
+            
+       
+        if self.x - self.radius <= left_x or self.x + self.radius >= right_x:
+            self.vx = -self.vx * self.restitution
+
+
+
